@@ -93,19 +93,19 @@ def pe_exports(path, data):
             if relative >= raw_size or length > raw_size - relative:
                 continue
             take(data, raw_offset + relative, length, path, f"data at RVA 0x{address:x}")
-            return raw_offset + relative
+            return raw_offset + relative, raw_offset + raw_size
         raise AuditError(f"{path}: RVA 0x{address:x} is not inside any section")
 
-    table = unpack("<IIHHIIIIIII", data, to_offset(rva, 40), path, "export directory")
+    table = unpack("<IIHHIIIIIII", data, to_offset(rva, 40)[0], path, "export directory")
     name_count, names_rva = table[7], table[9]
     names = set()
     if not name_count:
         return names
-    names_offset = to_offset(names_rva, name_count * 4)
+    names_offset = to_offset(names_rva, name_count * 4)[0]
     for index in range(name_count):
         name_rva = unpack("<I", data, names_offset + index * 4, path, "export name RVA")[0]
-        offset = to_offset(name_rva, 1)
-        names.add(cstring(data, offset, len(data), path, "export name"))
+        offset, limit = to_offset(name_rva, 1)
+        names.add(cstring(data, offset, limit, path, "export name"))
     return names
 
 

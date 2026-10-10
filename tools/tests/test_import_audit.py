@@ -204,6 +204,14 @@ class ImportAuditTests(unittest.TestCase):
             with self.assertRaisesRegex(import_audit.AuditError, "lib.prx"):
                 import_audit.pe_exports(path, image[:cut])
 
+    def test_pe_export_name_must_end_inside_its_section(self):
+        path = Path("lib.prx")
+        image = bytearray(build_pe(["alpha"]))
+        image[-1] = ord("X")
+        image.extend(b"\0")
+        with self.assertRaisesRegex(import_audit.AuditError, "not a NUL-terminated string"):
+            import_audit.pe_exports(path, bytes(image))
+
     def test_library_directories(self):
         work = self.work
         (work.libs / "libSceA.prx").write_bytes(build_pe(["AAAAAAAAAAA"]))
