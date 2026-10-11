@@ -172,6 +172,30 @@ void decoderRipRelative() {
     }
     for (const auto& instruction : kRegisterVectorOperations)
         require(!decoder.DecodeInstruction(instruction.data(), instruction.size()).HasRipRelativeDisp, "Vector instruction without a RIP-relative operand was reported as RIP-relative");
+    const std::vector<Bytes> absolute32 = {
+        {0x67, 0x8B, 0x05, 0x10, 0x00, 0x00, 0x00},
+        {0x67, 0x48, 0x8D, 0x05, 0x10, 0x00, 0x00, 0x00},
+        {0x67, 0xC5, 0xF9, 0x6F, 0x05, 0x10, 0x00, 0x00, 0x00},
+        {0x67, 0x0F, 0xB9, 0x05, 0x10, 0x00, 0x00, 0x00}};
+    for (const auto& instruction : absolute32) {
+        const auto info = decoder.DecodeInstruction(instruction.data(), instruction.size());
+        require(info.Length == instruction.size() && info.HasModRm && !info.HasRipRelativeDisp,
+                "Address-size override was incorrectly classified as RIP-relative");
+    }
+    for (const auto& [bytes, expected] : std::vector<std::pair<Bytes, Codegen::ControlFlowKind>>{
+             {{0x67, 0xFF, 0x15, 0x10, 0x00, 0x00, 0x00}, Codegen::ControlFlowKind::IndirectCall},
+             {{0x67, 0xFF, 0x25, 0x10, 0x00, 0x00, 0x00}, Codegen::ControlFlowKind::IndirectJump}}) {
+        const auto info = decoder.DecodeInstruction(bytes.data(), bytes.size());
+        require(info.Length == bytes.size() && info.FlowKind == expected && !info.HasRipRelativeDisp && !info.HasBranchTarget,
+                "Address-size override changed indirect call/jump to RIP-relative control flow");
+    }
+    for (const auto& [bytes, expected] : std::vector<std::pair<Bytes, Codegen::ControlFlowKind>>{
+             {{0xFF, 0x15, 0x10, 0x00, 0x00, 0x00}, Codegen::ControlFlowKind::Call},
+             {{0xFF, 0x25, 0x10, 0x00, 0x00, 0x00}, Codegen::ControlFlowKind::UnconditionalJump}}) {
+        const auto info = decoder.DecodeInstruction(bytes.data(), bytes.size());
+        require(info.Length == bytes.size() && info.FlowKind == expected && info.HasRipRelativeDisp,
+                "Unprefixed indirect control transfer lost its RIP-relative operand");
+    }
     const Bytes ud1 = {0x0F, 0xB9, 0x05, 0x10, 0x00, 0x00, 0x00};
     const auto trap = decoder.DecodeInstruction(ud1.data(), ud1.size());
     require(trap.Length == ud1.size() && trap.FlowKind == Codegen::ControlFlowKind::Trap && trap.HasRipRelativeDisp && read<std::int32_t>(ud1, trap.RipRelativeDispOffset) == 0x10, "UD1 was not decoded as a trap with its RIP-relative operand");
@@ -788,7 +812,9 @@ void rewriterReferenceSites() {
          {0xC5, 0xF9, 0x6F, 0x05, 0x02, 0x00, 0x00, 0x00, 0x66, 0x90, 0xC3}},
         {{0x66, 0x0F, 0x38, 0x00, 0x05, 0x01, 0x00, 0x00, 0x00, 0x90, 0xC3}, 9,
          {0x66, 0x0F, 0x38, 0x00, 0x05, 0x02, 0x00, 0x00, 0x00, 0x66, 0x90, 0xC3}},
-        {{0xE2, 0x01, 0x90, 0xC3}, 2, {0xE2, 0x02, 0x66, 0x90, 0xC3}}};
+        {{0xE2, 0x01, 0x90, 0xC3}, 2, {0xE2, 0x02, 0x66, 0x90, 0xC3}},
+        {{0x90, 0x67, 0x8B, 0x05, 0x09, 0x00, 0x00, 0x00, 0xC3}, 0,
+         {0x66, 0x90, 0x67, 0x8B, 0x05, 0x09, 0x00, 0x00, 0x00, 0xC3}}};
     for (const auto& [code, offset, expected] : cases)
         require(Codegen::X64InstructionRewriter{}.Rewrite(code, {offset, {0x66, 0x90}}).Bytes == expected, "Length-changing rewrite adjusted an immediate or missed a VEX, three-byte or LOOP reference");
 }

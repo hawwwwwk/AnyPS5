@@ -351,6 +351,7 @@ DecodedInstructionInfo X64InstructionDecoder::DecodeInstruction(
     info.Length = Decode(data, available);
 
     std::size_t pos = 0;
+    bool addressSizeOverride = false;
 
     while (pos < info.Length) {
         std::uint8_t b = data[pos];
@@ -359,6 +360,8 @@ DecodedInstructionInfo X64InstructionDecoder::DecodeInstruction(
             ++pos;
             continue;
         }
+        if (b == PrefixAddressSize)
+            addressSizeOverride = true;
         if (b == PrefixLock || b == PrefixRepne || b == PrefixRep ||
             b == PrefixSegCs || b == PrefixSegSs || b == PrefixSegDs ||
             b == PrefixSegEs || b == PrefixSegFs || b == PrefixSegGs ||
@@ -384,7 +387,7 @@ DecodedInstructionInfo X64InstructionDecoder::DecodeInstruction(
         info.ModRmRegField = (modrm >> ModRmRegShift) & ModRmRegMask;
         const std::uint8_t mod = registerOnly ? ModRmModRegister : (modrm >> ModRmModShift) & ModRmModMask;
         const std::uint8_t rm = modrm & ModRmRmMask;
-        if (mod == ModRmModIndirect && rm == ModRmRmRipRelative) {
+        if (!addressSizeOverride && mod == ModRmModIndirect && rm == ModRmRmRipRelative) {
             info.HasRipRelativeDisp = true;
             info.RipRelativeDispOffset = modrmPos + 1;
         }
@@ -459,7 +462,7 @@ DecodedInstructionInfo X64InstructionDecoder::DecodeInstruction(
             std::uint8_t mod = (modrm >> ModRmModShift) & ModRmModMask;
             std::uint8_t rm = modrm & ModRmRmMask;
             if (reg == 2) {
-                if (mod == ModRmModIndirect && rm == ModRmRmRipRelative) {
+                if (!addressSizeOverride && mod == ModRmModIndirect && rm == ModRmRmRipRelative) {
                     info.FlowKind = ControlFlowKind::Call;
                     info.HasRipRelativeDisp = true;
                     info.RipRelativeDispOffset = pos + 1;
@@ -469,7 +472,7 @@ DecodedInstructionInfo X64InstructionDecoder::DecodeInstruction(
                 return info;
             }
             if (reg == 4) {
-                if (mod == ModRmModIndirect && rm == ModRmRmRipRelative) {
+                if (!addressSizeOverride && mod == ModRmModIndirect && rm == ModRmRmRipRelative) {
                     std::int32_t disp = 0;
                     std::memcpy(&disp, data + pos + 1, 4);
                     info.FlowKind = ControlFlowKind::UnconditionalJump;
