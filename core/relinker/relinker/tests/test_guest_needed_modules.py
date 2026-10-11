@@ -182,6 +182,42 @@ def main():
         result = subprocess.run([str(relinker), "--macos", str(source), str(case / "output")],
                                 capture_output=True, text=True, timeout=30)
         assert result.returncode == 0, (result.stdout, result.stderr)
+        for windows in (False, True):
+            for needed in (b"needed.sprx", b"needed.debug_prx"):
+                case = work / f"guest-alias-{windows}-{needed.decode()}"
+                modules = case / "prx"
+                modules.mkdir(parents=True)
+                (case / "input.elf").write_bytes(main_fixture())
+                (modules / "needed.prx").write_bytes(module_with_symbol(True))
+                (modules / "consumer.prx").write_bytes(module_with_needed((needed,), (0,)))
+                output = case / ("output.exe" if windows else "output.elf")
+                result = subprocess.run([str(relinker), *(["--windows"] if windows else []),
+                                         str(case / "input.elf"), str(output)],
+                                        capture_output=True, text=True, timeout=30)
+                assert result.returncode == 0, (needed, windows, result.stdout, result.stderr)
+                if windows and os.name == "nt":
+                    run = subprocess.run([str(output)], capture_output=True, text=True, timeout=30)
+                    assert run.returncode == 42, (needed, run.returncode, run.stdout, run.stderr)
+                elif not windows:
+                    assert needed_libraries(output.read_bytes()) == [
+                        "$ORIGIN/app0/prx/needed.prx.guest.prx",
+                        "$ORIGIN/app0/prx/consumer.prx.guest.prx"]
+                    consumer = case / "app0" / "prx" / "consumer.prx.guest.prx"
+                    assert needed_libraries(consumer.read_bytes()) == ["$ORIGIN/needed.prx.guest.prx"]
+
+            case = work / f"guest-alias-ambiguous-{windows}"
+            modules = case / "prx"
+            modules.mkdir(parents=True)
+            (case / "input.elf").write_bytes(main_fixture())
+            (modules / "needed.prx").write_bytes(module_with_symbol(True))
+            (modules / "needed.sprx").write_bytes(guest_fixture(PLAIN_SITE))
+            (modules / "consumer.prx").write_bytes(module_with_needed((b"needed.debug_prx",), (0,)))
+            output = case / ("output.exe" if windows else "output.elf")
+            result = subprocess.run([str(relinker), *(["--windows"] if windows else []),
+                                     str(case / "input.elf"), str(output)],
+                                    capture_output=True, text=True, timeout=30)
+            assert result.returncode == 2 and "Ambiguous guest dependency alias" in result.stderr, result.stderr
+            assert not output.exists()
     print("Guest needed module tests passed")
 
 

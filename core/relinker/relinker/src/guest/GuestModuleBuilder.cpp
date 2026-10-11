@@ -190,6 +190,16 @@ std::vector<GuestArtifact> GuestModuleBuilder::Build(const std::filesystem::path
             if (match != images.size()) throw Domain::RelinkerException("Ambiguous guest module identity: " + name);
             match = index;
         }
+        if (match == images.size()) {
+            const auto stem = ModuleStem(name, windows);
+            if (!stem.empty()) {
+                for (std::size_t index = 0; index < images.size(); ++index) {
+                    if (ModuleStem(Io::Utf8Path(images[index].SourcePath.filename()), windows) != stem) continue;
+                    if (match != images.size()) throw Domain::RelinkerException("Ambiguous guest dependency alias: " + name);
+                    match = index;
+                }
+            }
+        }
         if (match != images.size()) guestNames.emplace(name, match);
     };
     for (const auto& name : missingNeeded) resolveIdentity(name);
