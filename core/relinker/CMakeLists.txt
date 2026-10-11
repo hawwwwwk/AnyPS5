@@ -364,6 +364,17 @@ if(BUILD_TESTING)
     )
     add_test(NAME entry_stub COMMAND entry_stub_tests)
 
+    add_test_executable(elf_virtual_address_bounds_tests
+        ${CMAKE_CURRENT_SOURCE_DIR}/relinker/tests/ElfVirtualAddressBoundsTests.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/relinker/src/parsing/ElfReader.cpp
+    )
+    target_include_directories(elf_virtual_address_bounds_tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/domain/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/relinker/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/elfpatcher/include
+    )
+    add_test(NAME elf_virtual_address_bounds COMMAND elf_virtual_address_bounds_tests)
+
     add_test_executable(strict_nid_filter_tests
         ${CMAKE_CURRENT_SOURCE_DIR}/relinker/tests/StrictNidFilterTests.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/relinker/src/analysis/UnusedNidFilter/StrictNidFilter.cpp
